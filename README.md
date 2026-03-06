@@ -533,6 +533,17 @@ to perform a certain action on a resource.
 
 <!--END ECOSYSTEM-->
 
+## AI Rule Suggestions
+
+Oathkeeper includes an AI-powered feature to help diagnose and suggest fixes for access rule errors. When a request matches no rules or matches multiple rules ambiguously, the AI can analyze your rule configuration and the failing request to provide actionable suggestions in the error output.
+
+To enable this feature, configure the following environment variables:
+
+- `USE_AI`: Set to `true` to enable AI rule suggestions.
+- `OPENAI_API_KEY`: Your OpenAI API key (required if `USE_AI` is `true`).
+- `OPENAI_API_URL`: (Optional) The OpenAI API endpoint URL. Defaults to `https://api.openai.com/v1/chat/completions`.
+- `OPENAI_API_MODEL`: (Optional) The OpenAI model to use. Defaults to `gpt-4o-mini`.
+
 ## Documentation
 
 The full Oathkeeper documentation is available at
