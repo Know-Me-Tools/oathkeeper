@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/ory/x/httpx"
 	"github.com/ory/x/otelx"
@@ -56,9 +57,11 @@ type AuthorizerRemoteJSON struct {
 
 // NewAuthorizerRemoteJSON creates a new AuthorizerRemoteJSON.
 func NewAuthorizerRemoteJSON(c configuration.Provider, d interface{ Tracer() trace.Tracer }) *AuthorizerRemoteJSON {
+	client := httpx.NewResilientClient().StandardClient()
+	client.Transport = otelhttp.NewTransport(client.Transport)
 	return &AuthorizerRemoteJSON{
 		c:      c,
-		client: httpx.NewResilientClient().StandardClient(),
+		client: client,
 		t:      x.NewTemplate("remote_json"),
 		tracer: d.Tracer(),
 	}
@@ -142,7 +145,9 @@ func (a *AuthorizerRemoteJSON) Authorize(r *http.Request, session *authn.Authent
 	}
 	defer func() { _ = res.Body.Close() }()
 
-	if res.StatusCode == http.StatusForbidden {
+	if res.StatusCode == http.StatusTooManyRequests {
+		return errors.WithStack(helper.NewErrTooManyRequestsWithHeaders(res))
+	} else if res.StatusCode == http.StatusForbidden {
 		return errors.WithStack(helper.ErrForbidden)
 	} else if res.StatusCode != http.StatusOK {
 		return errors.Errorf("expected status code %d but got %d", http.StatusOK, res.StatusCode)
@@ -187,10 +192,12 @@ func (a *AuthorizerRemoteJSON) Config(config json.RawMessage) (*AuthorizerRemote
 		return nil, err
 	}
 	timeout := time.Millisecond * duration
-	a.client = httpx.NewResilientClient(
+	client := httpx.NewResilientClient(
 		httpx.ResilientClientWithMaxRetryWait(maxWait),
 		httpx.ResilientClientWithConnectionTimeout(timeout),
 	).StandardClient()
+	client.Transport = otelhttp.NewTransport(client.Transport)
+	a.client = client
 
 	return &c, nil
 }
