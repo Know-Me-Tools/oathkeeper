@@ -106,13 +106,17 @@ func (f *FetcherDefault) watchLocalFiles(ctx context.Context) {
 			ctx, cancelWatchers[fp] = context.WithCancel(ctx)
 			w, err := watcherx.WatchFile(ctx, fp, f.events)
 			if err != nil {
-				f.registry.Logger().WithError(err).WithField("file", fp).Error("Unable to watch file, ignoring it.")
+				f.registry.Logger().WithError(err).WithField("file", fp).Error(
+					"Unable to watch access rule file. Rules from this file will NOT be loaded. " +
+						"Check that the file path exists and is readable by the oathkeeper process.")
 				continue
 			}
 			// we force reading the files
 			done, err := w.DispatchNow()
 			if err != nil {
-				f.registry.Logger().WithError(err).WithField("file", fp).Error("Unable to read file, ignoring it.")
+				f.registry.Logger().WithError(err).WithField("file", fp).Error(
+					"Unable to read access rule file. Rules from this file will NOT be loaded. " +
+						"Check file permissions and that the file is not empty.")
 				continue
 			}
 			go func() { <-done }() // we do not need to wait here, but we need to clear the channel
@@ -254,12 +258,16 @@ func (f *FetcherDefault) processLocalUpdates(ctx context.Context) {
 				Info("Detected file change for access rules. Triggering a reload.")
 
 			if e.Reader() == nil {
-				f.registry.Logger().WithField("file", e.Source()).Error("Unable to read access rules probably because they were deleted, skipping those.")
+				f.registry.Logger().WithField("file", e.Source()).Error(
+					"Access rule file appears to be deleted or unreadable. " +
+						"Rules from this file are now INACTIVE. Restore the file to re-enable them.")
 				continue
 			}
 			rules, err := f.decode(e.Reader())
 			if err != nil {
-				f.registry.Logger().WithField("file", e.Source()).WithError(err).Error("Unable to decode access rules, skipping those.")
+				f.registry.Logger().WithField("file", e.Source()).WithError(err).Error(
+					"Failed to parse access rules file. Rules from this file will NOT be loaded. " +
+						"Check that the file contains valid YAML or JSON with an array of rule objects.")
 				continue
 			}
 

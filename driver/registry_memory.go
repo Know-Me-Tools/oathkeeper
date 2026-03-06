@@ -5,6 +5,7 @@ package driver
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"go.opentelemetry.io/otel/trace"
@@ -71,6 +72,15 @@ func (r *RegistryMemory) Init() {
 		r.Logger().WithError(err).Fatal("Access rule watcher could not be initialized.")
 	}
 	_ = r.RuleRepository()
+}
+
+func (r *RegistryMemory) ValidateAndInit() error {
+	_ = r.Tracer() // make sure tracer is initialized
+	if err := r.RuleFetcher().Watch(context.Background()); err != nil {
+		return fmt.Errorf("access rule watcher could not be initialized: %w", err)
+	}
+	_ = r.RuleRepository()
+	return nil
 }
 
 func (r *RegistryMemory) RuleFetcher() rule.Fetcher {

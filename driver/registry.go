@@ -25,6 +25,7 @@ import (
 
 type Registry interface {
 	Init()
+	ValidateAndInit() error
 
 	WithConfig(c configuration.Provider) Registry
 	WithLogger(l *logrusx.Logger) Registry

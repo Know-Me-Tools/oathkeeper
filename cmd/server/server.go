@@ -224,6 +224,33 @@ func RunServe(version, build, date string) func(cmd *cobra.Command, args []strin
 		d := driver.NewDefaultDriver(logger, version, build, date, cmd.Flags())
 		d.Registry().Init()
 
+		// ── Startup validation gate ──────────────────────────────────────
+		// Fail fast if access rules are configured but none could be loaded
+		// successfully. This prevents the "running with no rules" silent
+		// failure that leads to all requests being rejected with no logs.
+		repos := d.Configuration().AccessRuleRepositories()
+		if len(repos) > 0 {
+			ctx := context.Background()
+			count, err := d.Registry().RuleRepository().Count(ctx)
+			if err != nil {
+				logger.WithError(err).Fatal("Failed to count access rules after initialization.")
+			}
+			if count == 0 {
+				for i, repo := range repos {
+					logger.Errorf("  Repository [%d]: %s", i, repo.String())
+				}
+				logger.Fatalf(
+					"No valid access rules loaded from %d configured repository/repositories. "+
+						"Oathkeeper refuses to start because it would reject all requests. "+
+						"Review the repositories listed above. Common causes: file not found, "+
+						"YAML/JSON syntax error, or rules reference handlers that are not enabled "+
+						"in the main configuration (authenticators, authorizers, mutators, errors).",
+					len(repos),
+				)
+			}
+			logger.Infof("Startup validation passed: %d access rule(s) loaded from %d repository/repositories.", count, len(repos))
+		}
+
 		adminmw := negroni.New()
 		publicmw := negroni.New()
 
