@@ -228,12 +228,26 @@ func RunServe(version, build, date string) func(cmd *cobra.Command, args []strin
 		// Fail fast if access rules are configured but none could be loaded
 		// successfully. This prevents the "running with no rules" silent
 		// failure that leads to all requests being rejected with no logs.
+		//
+		// Rule loading from local files is event-driven and asynchronous:
+		// processLocalUpdates runs in a goroutine and populates the
+		// repository after Watch() returns. Poll briefly to give it time
+		// rather than racing against a cold check.
 		repos := d.Configuration().AccessRuleRepositories()
 		if len(repos) > 0 {
 			ctx := context.Background()
-			count, err := d.Registry().RuleRepository().Count(ctx)
-			if err != nil {
-				logger.WithError(err).Fatal("Failed to count access rules after initialization.")
+			var count int
+			var err error
+			deadline := time.Now().Add(10 * time.Second)
+			for {
+				count, err = d.Registry().RuleRepository().Count(ctx)
+				if err != nil {
+					logger.WithError(err).Fatal("Failed to count access rules after initialization.")
+				}
+				if count > 0 || time.Now().After(deadline) {
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
 			}
 			if count == 0 {
 				for i, repo := range repos {

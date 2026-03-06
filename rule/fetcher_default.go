@@ -119,7 +119,7 @@ func (f *FetcherDefault) watchLocalFiles(ctx context.Context) {
 						"Check file permissions and that the file is not empty.")
 				continue
 			}
-			go func() { <-done }() // we do not need to wait here, but we need to clear the channel
+			<-done // wait for the initial dispatch to be delivered to processLocalUpdates
 		} else {
 			// keep watching files we are already watching
 			cancelWatchers[fp] = cancel
@@ -149,6 +149,12 @@ func (f *FetcherDefault) watchLocalFiles(ctx context.Context) {
 }
 
 func (f *FetcherDefault) Watch(ctx context.Context) error {
+	// Start the event processor first so it is ready to consume events dispatched
+	// by watchLocalFiles (via DispatchNow). Without this, the unbuffered f.events
+	// channel has no reader and the initial file load is lost, leaving zero rules
+	// in the repository when the startup validation gate checks the count.
+	go f.processLocalUpdates(ctx)
+
 	f.watchLocalFiles(ctx)
 
 	getRemoteRepos := func() map[url.URL]struct{} {
@@ -196,7 +202,6 @@ func (f *FetcherDefault) Watch(ctx context.Context) error {
 		remoteRepos = newRemoteRepos
 	})
 
-	go f.processLocalUpdates(ctx)
 	return nil
 }
 
